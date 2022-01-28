@@ -40,10 +40,10 @@ class GroundStation:
         LED= digitalio.DigitalInOut(board.LED)
         LED.switch_to_output(True)
         self.spi=board.SPI()
-        self.R1_CS  = digitalio.DigitalInOut(board.D5)
+        #self.R1_CS  = digitalio.DigitalInOut(board.D5)
         self.R2_CS  = digitalio.DigitalInOut(board.D20)
         self.R3_CS  = digitalio.DigitalInOut(board.D12)
-        self.R1_CS.switch_to_output(True)
+        #self.R1_CS.switch_to_output(True)
         self.R2_CS.switch_to_output(True)
         self.R3_CS.switch_to_output(True)
         self._BUFFER=bytearray(256)
@@ -60,8 +60,8 @@ class GroundStation:
     def init_radios(self,config):
         # define radio pins
         # 1 - RST:B(D61/D6) CS:C(DAC0/D5)  IRQ:IO5
-        R1_RST = digitalio.DigitalInOut(board.D6)
-        R1_RST.switch_to_output(True)
+        #R1_RST = digitalio.DigitalInOut(board.D6)
+        #R1_RST.switch_to_output(True)
         # 2 - RST:D(A7/D21) CS:E(A8/D20)   IRQ:IO6
         R2_RST = digitalio.DigitalInOut(board.D21)
         R2_RST.switch_to_output(True)
@@ -70,14 +70,14 @@ class GroundStation:
         R3_RST.switch_to_output(True)
 
         # initialize radios
-        radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
-        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
-        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
-        radio1.name=1
+        #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
+        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,436.703,code_rate=config['CR'],baudrate=1320000)
+        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,436.703,code_rate=config['CR'],baudrate=1320000)
+        #radio1.name=1
         radio2.name=2
         radio3.name=3
         # configure radios
-        for r in (radio1,radio2,radio3):
+        for r in (radio2, radio3):
             r.node = 0x33 # ground station ID
             r.idle()
             r.spreading_factor=config['SF']
@@ -90,7 +90,7 @@ class GroundStation:
             r.ack_delay=0.2
             r.ack_retries=0
             r.listen()
-        return (radio1,radio2,radio3)
+        return (radio2, radio3)
 
 
     def synctime(self,pool):
@@ -110,7 +110,7 @@ class GroundStation:
                     continue
 
             json1 = response.json()
-            # print(json1)
+            print(json1)
             current_time = json1['datetime']
             the_date, the_time = current_time.split('T')
             year, month, mday = [int(x) for x in the_date.split('-')]
