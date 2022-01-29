@@ -31,8 +31,9 @@ class GroundStation:
     last_rssi=0
 
     SATELLITE = {
-        'NORBI':{'NAME':'NORBI','FREQ':436.703,'SF':10,'BW':250000,'CR':8},
+        'NORBI':{'NAME':'NORBI','FREQ':433.0,'SF':10,'BW':250000,'CR':8}, #436.703
         'VR3X' :{'NAME':'VR3X','FREQ':915.6,'SF':7,'BW':62500,'CR':8}
+        # maybe adad one for our radio. Especially since SF and BW matter for connection
     }
 
     def __init__(self):
@@ -40,7 +41,7 @@ class GroundStation:
         LED= digitalio.DigitalInOut(board.LED)
         LED.switch_to_output(True)
         self.spi=board.SPI()
-        #self.R1_CS  = digitalio.DigitalInOut(board.D5)
+        self.R1_CS  = digitalio.DigitalInOut(board.D5)
         self.R2_CS  = digitalio.DigitalInOut(board.D20)
         self.R3_CS  = digitalio.DigitalInOut(board.D12)
         #self.R1_CS.switch_to_output(True)
@@ -71,8 +72,8 @@ class GroundStation:
 
         # initialize radios
         #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
-        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,436.703,code_rate=config['CR'],baudrate=1320000)
-        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,436.703,code_rate=config['CR'],baudrate=1320000)
+        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,433.0,code_rate=config['CR'],baudrate=1320000)
+        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,433.0,code_rate=config['CR'],baudrate=1320000)
         #radio1.name=1
         radio2.name=2
         radio3.name=3
@@ -80,8 +81,10 @@ class GroundStation:
         for r in (radio2, radio3):
             r.node = 0x33 # ground station ID
             r.idle()
-            r.spreading_factor=config['SF']
-            r.signal_bandwidth=config['BW']
+
+            #The two variables below need to be commented out if we want to test with our own radios
+            #r.spreading_factor=config['SF']
+            #r.signal_bandwidth=config['BW']
             r.coding_rate=config['CR']
             r.preamble_length = 8
             r.enable_crc=True
