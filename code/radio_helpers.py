@@ -31,7 +31,7 @@ class GroundStation:
     last_rssi=0
 
     SATELLITE = {
-        'NORBI':{'NAME':'NORBI','FREQ':433.0,'SF':10,'BW':250000,'CR':8}, #436.703
+        'NORBI':{'NAME':'NORBI','FREQ':436.703,'SF':10,'BW':250000,'CR':8}, #436.703
         'VR3X' :{'NAME':'VR3X','FREQ':915.6,'SF':7,'BW':62500,'CR':8}
         # maybe adad one for our radio. Especially since SF and BW matter for connection
     }
@@ -61,8 +61,8 @@ class GroundStation:
     def init_radios(self,config):
         # define radio pins
         # 1 - RST:B(D61/D6) CS:C(DAC0/D5)  IRQ:IO5
-        #R1_RST = digitalio.DigitalInOut(board.D6)
-        #R1_RST.switch_to_output(True)
+        R1_RST = digitalio.DigitalInOut(board.D6)
+        R1_RST.switch_to_output(True)
         # 2 - RST:D(A7/D21) CS:E(A8/D20)   IRQ:IO6
         R2_RST = digitalio.DigitalInOut(board.D21)
         R2_RST.switch_to_output(True)
@@ -71,9 +71,9 @@ class GroundStation:
         R3_RST.switch_to_output(True)
 
         # initialize radios
-        #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
-        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,433.0,code_rate=config['CR'],baudrate=1320000)
-        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,433.0,code_rate=config['CR'],baudrate=1320000)
+        #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,433.0,code_rate=config['CR'],baudrate=1320000)
+        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
+        radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
         #radio1.name=1
         radio2.name=2
         radio3.name=3

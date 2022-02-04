@@ -42,7 +42,6 @@ try:
     gs.synctime(pool)
 except Exception as e:
     print("Unable to connect to WiFi: {}".format(e))
-
 # check radios
 new_messages = {}
 if alarm.wake_alarm:
@@ -66,7 +65,7 @@ if alarm.wake_alarm:
                             "N": 1,
                         }
                         print(new_messages[r])
-                        print()
+                        print("\n message receive\n")
                         print(new_messages[r]["MSG"])
             print()
     radios = gs.init_radios(SAT)
@@ -118,6 +117,7 @@ if wifi.radio.ap_info is not None:
     # send any new messages
     if new_messages:
         for msg in new_messages:
+            mqtt_client.publish(DATA_TOPIC, "Message received")
             mqtt_client.publish(DATA_TOPIC, json.dumps(new_messages[msg]))
     # check for mqtt remote messages
     mqtt_client.loop()
