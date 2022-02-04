@@ -8,7 +8,7 @@ from binascii import hexlify
 gs.ID = "A"
 DATA_TOPIC = "gs/testsub"
 CTRL_TOPIC = "gs/remote" + gs.ID
-SAT = gs.SATELLITE["NORBI"]
+SAT = gs.SATELLITE["RADIO"]
 
 radios = []
 # if we haven't slept yet, init radios
@@ -64,9 +64,6 @@ if alarm.wake_alarm:
                             "RS": gs.last_rssi,
                             "N": 1,
                         }
-                        print(new_messages[r])
-                        print("\n message receive\n")
-                        print(new_messages[r]["MSG"])
             print()
     radios = gs.init_radios(SAT)
 

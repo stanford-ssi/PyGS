@@ -33,6 +33,8 @@ class GroundStation:
     SATELLITE = {
         'NORBI':{'NAME':'NORBI','FREQ':436.703,'SF':10,'BW':250000,'CR':8}, #436.703
         'VR3X' :{'NAME':'VR3X','FREQ':915.6,'SF':7,'BW':62500,'CR':8}
+        'RADIO' :{'NAME':'RADIO','FREQ':433.0,'SF':7,'BW':125000,'CR':5} # default values
+
         # maybe adad one for our radio. Especially since SF and BW matter for connection
     }
 
@@ -83,8 +85,10 @@ class GroundStation:
             r.idle()
 
             #The two variables below need to be commented out if we want to test with our own radios
-            #r.spreading_factor=config['SF']
-            #r.signal_bandwidth=config['BW']
+            # NOTE: Maybe this values are why we get crc errors. Moreover, when these weren't commented out for NORBI,
+            # it didnt receive a signal. Until I commented them out and reloaded.
+            r.spreading_factor=config['SF']
+            r.signal_bandwidth=config['BW']
             r.coding_rate=config['CR']
             r.preamble_length = 8
             r.enable_crc=True
