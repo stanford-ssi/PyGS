@@ -52,7 +52,9 @@ if alarm.wake_alarm:
             for msg in gs.get_msg2(radios[r]):
                 if msg is not None:
                     print("[{}] rssi:{}".format(bytes(msg), gs.last_rssi), end=", ")
-                    if msg is b"CRC ERROR":
+                    print("\n", msg)
+                    if msg is b'CRC ERROR':
+                        print("CRB")
                         continue
                     else:
                         # radio, time, gs id, msg, rssi, new?
@@ -60,10 +62,12 @@ if alarm.wake_alarm:
                             "RD": r,
                             "T": time.time(),
                             "I": gs.ID,
-                            "MSG": hexlify(msg),
+                            "MSG": msg, #hexlify(msg),
                             "RS": gs.last_rssi,
                             "N": 1,
                         }
+                        print(new_messages[r])
+                        print("passes crc check")
             print()
     radios = gs.init_radios(SAT)
 

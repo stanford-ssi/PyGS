@@ -32,7 +32,7 @@ class GroundStation:
 
     SATELLITE = {
         'NORBI':{'NAME':'NORBI','FREQ':436.703,'SF':10,'BW':250000,'CR':8}, #436.703
-        'VR3X' :{'NAME':'VR3X','FREQ':915.6,'SF':7,'BW':62500,'CR':8}
+        'VR3X' :{'NAME':'VR3X','FREQ':915.6,'SF':7,'BW':62500,'CR':8},
         'RADIO' :{'NAME':'RADIO','FREQ':433.0,'SF':7,'BW':125000,'CR':5} # default values
 
         # maybe adad one for our radio. Especially since SF and BW matter for connection
@@ -73,14 +73,14 @@ class GroundStation:
         R3_RST.switch_to_output(True)
 
         # initialize radios
-        #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,433.0,code_rate=config['CR'],baudrate=1320000)
-        radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
+        #radio1 = pycubed_rfm9x.RFM9x(board.SPI(),self.R1_CS,R1_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
+        #radio2 = pycubed_rfm9x.RFM9x(board.SPI(),self.R2_CS,R2_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
         radio3 = pycubed_rfm9x.RFM9x(board.SPI(),self.R3_CS,R3_RST,config['FREQ'],code_rate=config['CR'],baudrate=1320000)
         #radio1.name=1
-        radio2.name=2
+        #radio2.name=2
         radio3.name=3
         # configure radios
-        for r in (radio2, radio3):
+        for r in (radio3,):
             r.node = 0x33 # ground station ID
             r.idle()
 
@@ -97,7 +97,7 @@ class GroundStation:
             r.ack_delay=0.2
             r.ack_retries=0
             r.listen()
-        return (radio2, radio3)
+        return (radio3)
 
 
     def synctime(self,pool):
@@ -172,7 +172,7 @@ class GroundStation:
         self.spi.readinto(buf,end=length)
         radio_cs.value=True
         self.spi.unlock()
-        # print(buf)
+        #print(buf)
 
     def _read_u8(self,radio_cs,address):
         self._read_into(radio_cs,address,self._BUFFER,1)
@@ -198,12 +198,18 @@ class GroundStation:
             packet=None
             error=1
             self.last_rssi=self._read_u8(radio_cs,0x1A)-164
+            print ("Ran1")
             # put into idle mode
             reg=self._read_u8(radio_cs,0x01)
+            print ("Ran2")
             reg&=~7 # mask
             reg|= (1&0xFF) # standby
             self._write_u8(radio_cs,0x01,reg)
+            print ("Ran3")
+            print((self._read_u8(radio_cs,0x12) & 0x20) >> 5)
+            print(self._read_u8(radio_cs,0x12))
             if not (self._read_u8(radio_cs,0x12) & 0x20) >> 5:
+                print ("Ran4")
                 l=self._read_u8(radio_cs,0x13) # fifo length
                 # print(l)
                 if l:
@@ -213,6 +219,7 @@ class GroundStation:
                     self._read_into(radio_cs,0,packet)
                 error=0
             else:
+                print ("Ran5")
                 print('crc error')
                 yield b'CRC ERROR'
             # clear IRQ flags
