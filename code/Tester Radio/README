@@ -1,0 +1,2 @@
+The board that was used for this test radio had updated firmware compared to the ground station. 
+So if you directly copy the library into a board that had the previous firmware installed, it is possible to have compatibility issues. So make sure that library and firmware versions are the same.
