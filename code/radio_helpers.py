@@ -270,5 +270,5 @@ class GroundStation:
                 r.operation_mode = 5
                 tout = time.monotonic() + 2
                 yield packet
-                
+
 gs = GroundStation()
