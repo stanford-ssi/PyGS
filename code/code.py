@@ -5,10 +5,11 @@ from secrets import secrets
 import storage, os, board, json
 from binascii import hexlify
 
+
 gs.ID = "A"
 DATA_TOPIC = "gs/testsub"
 CTRL_TOPIC = "gs/remote" + gs.ID
-SAT = gs.SATELLITE["RADIO"]
+SAT = gs.SATELLITE["SAPLING"]
 
 radios = []
 # if we haven't slept yet, init radios
@@ -52,7 +53,6 @@ if alarm.wake_alarm:
             for msg in gs.get_msg2(radios[r]):
                 if msg is not None:
                     print("[{}] rssi:{}".format(bytes(msg), gs.last_rssi), end=", ")
-                    print("\n", msg)
                     if (msg == b'CRC ERROR'):
                         print("Failed crc check")
                         continue
@@ -62,7 +62,7 @@ if alarm.wake_alarm:
                             "RD": r,
                             "T": time.time(),
                             "I": gs.ID,
-                            "MSG": msg, #hexlify(msg),
+                            "MSG": hexlify(msg), #bytes(msg),
                             "RS": gs.last_rssi,
                             "N": 1,
                         }
@@ -99,15 +99,20 @@ if wifi.radio.ap_info is not None:
         "R": wifi.radio.ap_info.rssi,
     }
 
+
     mqtt_client.connect()
     mqtt_client.subscribe(CTRL_TOPIC)
+    mqtt_client.publish(DATA_TOPIC, "Sending status")
+
     mqtt_client.publish(DATA_TOPIC, json.dumps(status))
+
 
     # send any cached messages
     if gs.msg_cache:
         with open("/data.txt", "r") as f:
             l = f.readline()
             while l:
+                mqtt_client.publish(DATA_TOPIC, "Sending cached message")
                 mqtt_client.publish(DATA_TOPIC, l.strip())
                 l = f.readline()
         try:
@@ -120,6 +125,9 @@ if wifi.radio.ap_info is not None:
     if new_messages:
         for msg in new_messages:
             mqtt_client.publish(DATA_TOPIC, "Message received")
+            print("Sending message")
+            print(new_messages[msg])
+            #mqtt_client.publish(DATA_TOPIC, new_messages[msg])
             mqtt_client.publish(DATA_TOPIC, json.dumps(new_messages[msg]))
     # check for mqtt remote messages
     mqtt_client.loop()
