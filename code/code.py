@@ -7,9 +7,11 @@ from binascii import hexlify
 
 
 gs.ID = "A"
-DATA_TOPIC = "gs/testsub"
-CTRL_TOPIC = "gs/remote" + gs.ID
-SAT = gs.SATELLITE["SAPLING"]
+DATA_TOPIC = "stanford/gs/messages"
+STATUS_TOPIC = "stanford/gs/status/" + gs.ID
+CTRL_TOPIC = "stanford/gs/remote/" + gs.ID
+
+SAT = gs.SATELLITE["RADIO"]
 
 radios = []
 # if we haven't slept yet, init radios
@@ -34,8 +36,8 @@ print(
 # try connecting to wifi
 print("Connecting to WiFi...")
 try:
-    wifi.radio.connect(ssid="Stanford")  # open network
-
+    wifi.radio.connect(ssid=secrets['homeSSID'], password=secrets['homePass'])
+    #wifi.radio.connect(ssid="Stanford") # open network
     print("Signal: {}".format(wifi.radio.ap_info.rssi))
     # Create a socket pool
     pool = socketpool.SocketPool(wifi.radio)
@@ -59,11 +61,12 @@ if alarm.wake_alarm:
                     else:
                         # radio, time, gs id, msg, rssi, new?
                         new_messages[r] = {
-                            "RD": r,
-                            "T": time.time(),
-                            "I": gs.ID,
-                            "MSG": hexlify(msg), #bytes(msg),
-                            "RS": gs.last_rssi,
+                            "Radio": r,
+                            "Time": time.time(),
+                            "ID": gs.ID,
+                            "Hexlify MSG": hexlify(msg), 
+                            "Bytes MSG": bytes(msg),
+                            "RSSI": gs.last_rssi,
                             "N": 1,
                         }
                         print(new_messages[r])
@@ -90,21 +93,21 @@ if wifi.radio.ap_info is not None:
     mqtt_client.on_message = mqtt_message
 
     status = {
-        "T": time.time(),
-        "I": gs.ID,
+        "Time": time.time(),
+        "ID": gs.ID,
         "#": gs.counter,
-        "M": gs.msg_count,
-        "C": gs.msg_cache,
-        "B": gs.battery_voltage,
-        "R": wifi.radio.ap_info.rssi,
+        "MSG#": gs.msg_count,
+        "MSG_Cache": gs.msg_cache,
+        "Battery": gs.battery_voltage,
+        "WiFi_RSSI": wifi.radio.ap_info.rssi,
     }
 
 
     mqtt_client.connect()
     mqtt_client.subscribe(CTRL_TOPIC)
-    mqtt_client.publish(DATA_TOPIC, "Sending status")
-
-    mqtt_client.publish(DATA_TOPIC, json.dumps(status))
+    print("Sending status")
+    message = "GS {} status: ".format(gs.ID) + json.dumps(status)
+    mqtt_client.publish(STATUS_TOPIC, message)
 
 
     # send any cached messages
@@ -112,8 +115,8 @@ if wifi.radio.ap_info is not None:
         with open("/data.txt", "r") as f:
             l = f.readline()
             while l:
-                mqtt_client.publish(DATA_TOPIC, "Sending cached message")
-                mqtt_client.publish(DATA_TOPIC, l.strip())
+                message = "Sending cached message: " + l.strip()
+                mqtt_client.publish(DATA_TOPIC, message)
                 l = f.readline()
         try:
             os.remove("/data.txt")
@@ -124,11 +127,11 @@ if wifi.radio.ap_info is not None:
     # send any new messages
     if new_messages:
         for msg in new_messages:
-            mqtt_client.publish(DATA_TOPIC, "Message received")
             print("Sending message")
             print(new_messages[msg])
             #mqtt_client.publish(DATA_TOPIC, new_messages[msg])
-            mqtt_client.publish(DATA_TOPIC, json.dumps(new_messages[msg]))
+            message = "Message received: " + json.dumps(new_messages[msg])
+            mqtt_client.publish(DATA_TOPIC, message)
     # check for mqtt remote messages
     mqtt_client.loop()
     # break mqtt connection
