@@ -7,9 +7,9 @@ from binascii import hexlify
 
 
 gs.ID = "A"
-DATA_TOPIC = "stanford/gs/messages"
-STATUS_TOPIC = "stanford/gs/status/" + gs.ID
-CTRL_TOPIC = "stanford/gs/remote/" + gs.ID
+DATA_TOPIC = "ssi/gs/messages"
+STATUS_TOPIC = "ssi/gs/status/" + gs.ID
+CTRL_TOPIC = "ssi/gs/remote/" + gs.ID
 
 SAT = gs.SATELLITE["RADIO"]
 
@@ -65,7 +65,7 @@ if alarm.wake_alarm:
                             "Time": time.time(),
                             "ID": gs.ID,
                             "Hexlify MSG": hexlify(msg), 
-                            "Bytes MSG": bytes(msg),
+                            "Bytes MSG": str(bytes(msg)),
                             "RSSI": gs.last_rssi,
                             "N": 1,
                         }
