@@ -41,8 +41,7 @@ class GroundStation:
         # 436.703
         'NORBI': {'NAME': 'NORBI', 'FREQ': 436.703, 'SF': 10, 'BW': 250000, 'CR': 8, 'BR': 1320000},
         'VR3X': {'NAME': 'VR3X', 'FREQ': 915.6, 'SF': 7, 'BW': 62500, 'CR': 8, 'BR': 1320000},
-        # default values
-        'RADIO': {'NAME': 'RADIO', 'FREQ': 433.0, 'SF': 7, 'BW': 125000, 'CR': 5, 'BR': 5000000},
+        'RADIO': {'NAME': 'RADIO', 'FREQ': 433.0, 'SF': 7, 'BW': 125000, 'CR': 5, 'BR': 5000000}, # default values
         'SAPLING': {'NAME': 'SAPLING', 'FREQ': 437.4, 'SF': 7, 'BW': 125000, 'CR': 8, 'BR': 1320000}
     }
 
