@@ -16,31 +16,6 @@ from code.code import radios
 FIFO = bytearray(256)
 fifo_view = memoryview(FIFO)
 ID = config['ID']
-
-def send_message(client, message):
-    log = ""
-    print("Sending Message")
-    log += "Sending Message \n"
-
-    status = False
-    for r in radios:
-        for listener in radios:
-            if listener is not r:
-                listener.idle()
-
-        status = r.send(message, keep_listening=False)
-
-        for radio in radios:
-            radio.listen()
-
-        if status:
-            print("Signal sent successfully on radio {}".format(r.name))
-            log += "Signal sent successfully on radio {}".format(r.name)
-            break
-        else:
-            print("Radio {} failed to send message".format(r.name))
-            log += "Radio {} failed to send message".format(r.name)
-    client.publish('ssi/gs/remote/' + ID, log)
         
 
 def mqtt_message(client, feed_id, payload):
@@ -57,7 +32,7 @@ def mqtt_message(client, feed_id, payload):
             program = payload[4:]
             runScript(program)
         elif payload[:4] == 'SEND':
-            send_message(client, payload[5:])
+            gs.send_message(client, payload[5:])
         elif payload[:4] == 'PING':
             message = "You pinged ground station {}. This is the local time: {}".format(config['ID']. str(time.time()))
             client.publish('ssi/gs/remote/' + ID, message)
@@ -75,6 +50,7 @@ def connected(client, userdata, flags, rc):
 class GroundStation:
     myuid = int.from_bytes(cpu.uid, 'big')
     last_rssi = 0
+    radios = ()
 
     SATELLITE = {
         # 436.703
@@ -147,7 +123,8 @@ class GroundStation:
             r.ack_delay = 0.2
             r.ack_retries = 0
             r.listen()
-        return (radio1, radio2, radio3)
+        radios = (radio1, radio2, radio3)
+        return radios
 
     def synctime(self, pool):
         try:
@@ -308,5 +285,30 @@ class GroundStation:
                 r.operation_mode = 5
                 tout = time.monotonic() + 2
                 yield packet
+    def send_message(self, client, message):
+        log = ""
+        print("Sending Message")
+        log += "Sending Message \n"
+
+        status = False
+        for r in self.radios:
+            #Turn them all off so message doesn't bounce around
+            for radio in self.radios:
+                radio.idle()
+
+            status = r.send(message, keep_listening=False)
+
+            # Turn them back on
+            for radio in radios:
+                radio.listen()
+
+            if status:
+                print("Signal sent successfully on radio {}".format(r.name))
+                log += "Signal sent successfully on radio {}".format(r.name)
+                break
+            else:
+                print("Radio {} failed to send message".format(r.name))
+                log += "Radio {} failed to send message".format(r.name)
+        client.publish('ssi/gs/remote/' + ID, log)
 
 gs = GroundStation()
