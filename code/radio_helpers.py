@@ -9,22 +9,61 @@ import json
 from microcontroller import cpu
 from analogio import AnalogIn
 
+from gs_config import config
+from scriptRunner import runScript
+from code.code import radios
+
 FIFO = bytearray(256)
 fifo_view = memoryview(FIFO)
+ID = config['ID']
 
+def send_message(client, message):
+    log = ""
+    print("Sending Message")
+    log += "Sending Message \n"
+
+    status = False
+    for r in radios:
+        for listener in radios:
+            if listener is not r:
+                listener.idle()
+
+        status = r.send(message, keep_listening=False)
+
+        for radio in radios:
+            radio.listen()
+
+        if status:
+            print("Signal sent successfully on radio {}".format(r.name))
+            log += "Signal sent successfully on radio {}".format(r.name)
+            break
+        else:
+            print("Radio {} failed to send message".format(r.name))
+            log += "Radio {} failed to send message".format(r.name)
+    client.publish('ssi/gs/remote/' + ID, log)
+        
 
 def mqtt_message(client, feed_id, payload):
     print("[{0}] {1}".format(feed_id, payload))
     try:
-        if payload[:2] == 'EV':
-            client.publish('gs/remote/response', str(eval(payload[2:])))
-        elif payload[:2] == 'EX':
-            exec(payload[2:].encode())
+        if payload[:7] == 'PUBLISH':
+            argsList = payload[8:].split(' ', 1) # Cuts off space as well
+            topic = argsList[0]
+            message = argsList[1]
+            client.publish(topic, message)
+        elif payload[:4] == 'EXEC':
+            exec(payload[5:].encode())
+        elif payload[:3] == 'RUN':
+            program = payload[4:]
+            runScript(program)
+        elif payload[:4] == 'SEND':
+            send_message(client, payload[5:])
         elif payload[:4] == 'PING':
-            client.publish('gs/remote/response', str(time.time()))
+            message = "You pinged ground station {}. This is the local time: {}".format(config['ID']. str(time.time()))
+            client.publish('ssi/gs/remote/' + ID, message)
     except Exception as e:
         print('error: {}'.format(e))
-        client.publish('gs/remote/response', str(e))
+        client.publish('ssi/gs/remote/' + ID, str(e))
 
 
 def connected(client, userdata, flags, rc):

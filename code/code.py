@@ -4,9 +4,9 @@ from radio_helpers import gs, mqtt_message, connected
 from secrets import secrets
 import storage, os, board, json
 from binascii import hexlify
+from gs_config import config
 
-
-gs.ID = "A"
+gs.ID = config['ID']
 DATA_TOPIC = "ssi/gs/messages"
 STATUS_TOPIC = "ssi/gs/status/" + gs.ID
 CTRL_TOPIC = "ssi/gs/remote/" + gs.ID
