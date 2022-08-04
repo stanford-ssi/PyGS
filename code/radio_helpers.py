@@ -11,15 +11,18 @@ from analogio import AnalogIn
 
 from gs_config import config
 from scriptRunner import runScript
-from code.code import radios
+#from code.code import radios
 
 FIFO = bytearray(256)
 fifo_view = memoryview(FIFO)
 ID = config['ID']
-        
+    
+def subscribe(mqtt_client, userdata, topic, granted_qos):
+    # This method is called when the mqtt_client subscribes to a new feed.
+    print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
 
-def mqtt_message(client, feed_id, payload):
-    print("[{0}] {1}".format(feed_id, payload))
+def mqtt_message(client, topic, payload):
+    print("[{}] {}".format(topic, payload))
     try:
         if payload[:7] == 'PUBLISH':
             argsList = payload[8:].split(' ', 1) # Cuts off space as well
@@ -27,18 +30,18 @@ def mqtt_message(client, feed_id, payload):
             message = argsList[1]
             client.publish(topic, message)
         elif payload[:4] == 'EXEC':
-            exec(payload[5:].encode())
+            exec(payload[5:])
         elif payload[:3] == 'RUN':
             program = payload[4:]
             runScript(program)
         elif payload[:4] == 'SEND':
             gs.send_message(client, payload[5:])
         elif payload[:4] == 'PING':
-            message = "You pinged ground station {}. This is the local time: {}".format(config['ID']. str(time.time()))
+            message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
             client.publish('ssi/gs/remote/' + ID, message)
     except Exception as e:
         print('error: {}'.format(e))
-        client.publish('ssi/gs/remote/' + ID, str(e))
+        client.publish('ssi/gs/remote/' + ID, e)
 
 
 def connected(client, userdata, flags, rc):
@@ -50,7 +53,7 @@ def connected(client, userdata, flags, rc):
 class GroundStation:
     myuid = int.from_bytes(cpu.uid, 'big')
     last_rssi = 0
-    radios = ()
+    radios = None
 
     SATELLITE = {
         # 436.703
@@ -123,8 +126,8 @@ class GroundStation:
             r.ack_delay = 0.2
             r.ack_retries = 0
             r.listen()
-        radios = (radio1, radio2, radio3)
-        return radios
+        self.radios = (radio1, radio2, radio3)
+        return self.radios
 
     def synctime(self, pool):
         try:
@@ -285,13 +288,15 @@ class GroundStation:
                 r.operation_mode = 5
                 tout = time.monotonic() + 2
                 yield packet
+                
     def send_message(self, client, message):
         log = ""
-        print("Sending Message")
+        print("Sending Message: {}".format(message))
         log += "Sending Message \n"
 
         status = False
         for r in self.radios:
+            print("Radios")
             #Turn them all off so message doesn't bounce around
             for radio in self.radios:
                 radio.idle()
@@ -299,12 +304,12 @@ class GroundStation:
             status = r.send(message, keep_listening=False)
 
             # Turn them back on
-            for radio in radios:
+            for radio in self.radios:
                 radio.listen()
 
             if status:
                 print("Signal sent successfully on radio {}".format(r.name))
-                log += "Signal sent successfully on radio {}".format(r.name)
+                log += "[log]Signal sent successfully on radio {}".format(r.name)
                 break
             else:
                 print("Radio {} failed to send message".format(r.name))
