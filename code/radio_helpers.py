@@ -133,7 +133,7 @@ class GroundStation:
             r.listen()
         self.radios = (radio1, radio2, radio3)
 
-        if self.sendMSG:
+        if sendMSG:
             self.send_message("Sending signal on radio init")
 
         return self.radios
