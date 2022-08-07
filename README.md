@@ -3,6 +3,11 @@ Simple wifi ground station running circuitpython
 
 <img src="https://user-images.githubusercontent.com/29153441/110256112-fbe07c80-7f4b-11eb-9c6c-1eda8e213f39.png" width="600">
 
+
+## MQTT Bot and Communication
+If you want to see how to communicate with the PyGs and send commands Click [here](MQTT_Bot.md)
+ 
+
 ## Example Hardware Setup
 As opposed to using an antenna+rotator for receiving satellites moving across the sky, another option is to use multiple antennas like this:
 <img src="https://user-images.githubusercontent.com/29153441/110256188-62fe3100-7f4c-11eb-9c8b-7ef9e2acd3e6.png" width="700">

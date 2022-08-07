@@ -9,22 +9,44 @@ import json
 from microcontroller import cpu
 from analogio import AnalogIn
 
+from gs_config import config
+from scriptRunner import runScript
+from secrets import secrets
+
 FIFO = bytearray(256)
 fifo_view = memoryview(FIFO)
 
+ID = config['ID']
+STATUS_TOPIC =  secrets['status'] + ID
+REMOTE_TOPIC =  + secrets['remote'] + ID
 
-def mqtt_message(client, feed_id, payload):
-    print("[{0}] {1}".format(feed_id, payload))
+sendMSG = False # A flag to send a radio signal after initialization 
+    
+def subscribe(mqtt_client, userdata, topic, granted_qos):
+    # This method is called when the mqtt_client subscribes to a new feed.
+    print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
+
+def mqtt_message(client, topic, payload):
+    print("[{}] {}".format(topic, payload))
     try:
-        if payload[:2] == 'EV':
-            client.publish('gs/remote/response', str(eval(payload[2:])))
-        elif payload[:2] == 'EX':
-            exec(payload[2:].encode())
+        if payload[:7] == 'PUBLISH':
+            argsList = payload[8:].split(' ', 1) # Cuts off space as well
+            topic = argsList[0]
+            message = argsList[1]
+            client.publish(topic, message)
+        elif payload[:4] == 'EXEC':
+            exec(payload[5:])
+        elif payload[:3] == 'RUN': # Just file name, no file type extension
+            program = payload[4:]
+            runScript(program)
+        elif payload[:4] == 'SEND':
+            gs.send_message(payload[5:], client)
         elif payload[:4] == 'PING':
-            client.publish('gs/remote/response', str(time.time()))
-    except Exception as e:
-        print('error: {}'.format(e))
-        client.publish('gs/remote/response', str(e))
+            message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
+            client.publish(REMOTE_TOPIC, message)
+    except Exception as err:
+        print('error: {}'.format(err))
+        client.publish(REMOTE_TOPIC, err)
 
 
 def connected(client, userdata, flags, rc):
@@ -36,6 +58,7 @@ def connected(client, userdata, flags, rc):
 class GroundStation:
     myuid = int.from_bytes(cpu.uid, 'big')
     last_rssi = 0
+    radios = None
 
     SATELLITE = {
         # 436.703
@@ -108,7 +131,12 @@ class GroundStation:
             r.ack_delay = 0.2
             r.ack_retries = 0
             r.listen()
-        return (radio1, radio2, radio3)
+        self.radios = (radio1, radio2, radio3)
+
+        if sendMSG:
+            self.send_message("Sending signal on radio init")
+
+        return self.radios
 
     def synctime(self, pool):
         try:
@@ -240,34 +268,33 @@ class GroundStation:
             reg |= (5 & 0xFF)  # RX mode
             self._write_u8(radio_cs, 0x01, reg)
             yield packet
+                
+    def send_message(self, message, client=None):
+        log = ""
+        print("Sending Message: {}".format(message))
+        log += "Sending Message \n"
 
-    def get_msg(self, r):
-        tout = time.monotonic()+2
-        while time.monotonic() < tout:
-            if not r.rx_done():
-                pass
+        status = False
+        for r in self.radios:
+            print("Radios")
+            #Turn them all off so message doesn't bounce around
+            for radio in self.radios:
+                radio.idle()
+
+            status = r.send(message, keep_listening=False)
+
+            # Turn them back on
+            for radio in self.radios:
+                radio.listen()
+
+            if status:
+                print("Signal sent successfully on radio {}".format(r.name))
+                log += "[log]Signal sent successfully on radio {}".format(r.name)
+                break
             else:
-                packet = None
-                error = 1
-                self.last_rssi = r._read_u8(0x1A)-164
-                r.idle()
-                if not r.crc_error():
-                    l = r._read_u8(0x13)  # fifo length
-                    # print(l)
-                    if l:
-                        pos = r._read_u8(0x10)
-                        r._write_u8(0x0D, pos)
-                        packet = fifo_view[:l]
-                        r._read_into(0, packet)
-                    error = 0
-                else:
-                    print('crc error')
-                    yield b'CRC ERROR'
-                # clear IRQ flags
-                r._write_u8(0x12, 0xFF)
-                # start listening again
-                r.operation_mode = 5
-                tout = time.monotonic() + 2
-                yield packet
+                print("Radio {} failed to send message".format(r.name))
+                log += "Radio {} failed to send message".format(r.name)
+        if client != None:
+            client.publish(REMOTE_TOPIC, log)
 
 gs = GroundStation()

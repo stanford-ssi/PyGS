@@ -1,17 +1,20 @@
 import wifi, socketpool, time, alarm
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
-from radio_helpers import gs, mqtt_message, connected
+from radio_helpers import gs, mqtt_message, connected, subscribe
 from secrets import secrets
+from gs_config import config
 import storage, os, board, json
 from binascii import hexlify
+import time
 
+ID = config['ID']
 
-gs.ID = "A"
-DATA_TOPIC = "ssi/gs/messages"
-STATUS_TOPIC = "ssi/gs/status/" + gs.ID
-CTRL_TOPIC = "ssi/gs/remote/" + gs.ID
+target = config['SAT']
+SAT = gs.SATELLITE[target]
 
-SAT = gs.SATELLITE["RADIO"]
+DATA_TOPIC = secrets['data']
+STATUS_TOPIC =  secrets['status'] + ID
+REMOTE_TOPIC =  + secrets['remote'] + ID
 
 radios = []
 # if we haven't slept yet, init radios
@@ -45,6 +48,7 @@ try:
     gs.synctime(pool)
 except Exception as e:
     print("Unable to connect to WiFi: {}".format(e))
+
 # check radios
 new_messages = {}
 if alarm.wake_alarm:
@@ -63,8 +67,8 @@ if alarm.wake_alarm:
                         new_messages[r] = {
                             "Radio": r,
                             "Time": time.time(),
-                            "ID": gs.ID,
-                            "Hexlify MSG": hexlify(msg), 
+                            "ID": ID,
+                            "Hexlify MSG": hexlify(msg),
                             "Bytes MSG": str(bytes(msg)),
                             "RSSI": gs.last_rssi,
                             "N": 1,
@@ -91,10 +95,11 @@ if wifi.radio.ap_info is not None:
     )
     mqtt_client.on_connect = connected
     mqtt_client.on_message = mqtt_message
+    mqtt_client.on_subscribe = subscribe
 
     status = {
         "Time": time.time(),
-        "ID": gs.ID,
+        "ID": ID,
         "#": gs.counter,
         "MSG#": gs.msg_count,
         "MSG_Cache": gs.msg_cache,
@@ -104,9 +109,10 @@ if wifi.radio.ap_info is not None:
 
 
     mqtt_client.connect()
-    mqtt_client.subscribe(CTRL_TOPIC)
+    mqtt_client.subscribe(REMOTE_TOPIC)
+    
     print("Sending status")
-    message = "GS {} status: ".format(gs.ID) + json.dumps(status)
+    message = "GS {} status: ".format(ID) + json.dumps(status)
     mqtt_client.publish(STATUS_TOPIC, message)
 
 
@@ -132,9 +138,27 @@ if wifi.radio.ap_info is not None:
             #mqtt_client.publish(DATA_TOPIC, new_messages[msg])
             message = "Message received: " + json.dumps(new_messages[msg])
             mqtt_client.publish(DATA_TOPIC, message)
+
     # check for mqtt remote messages
-    mqtt_client.loop()
-    # break mqtt connection
+    queuedUp = None
+    loopOnce = True
+    waitTime = 30
+    print("Waiting {} seconds for commands to be sent to ground station before processing".format(waitTime))
+    mqtt_client.publish(REMOTE_TOPIC, "Waiting {} seconds for commands to be sent to ground station before processing".format(waitTime))
+    time.sleep(waitTime)
+
+    # Loop through commands
+    while loopOnce or queuedUp != None:
+        loopOnce = False
+        try:
+            #Grab next command
+            queuedUp = mqtt_client.loop()
+        except:
+            print("Error on mqtt loop")
+        else:
+            print(queuedUp)
+        time.sleep(2)
+     
     mqtt_client.disconnect()
 
 # if we can't connect, cache message
