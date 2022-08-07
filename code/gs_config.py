@@ -1,3 +1,4 @@
 config = {
-    'ID': 'A'
+    'ID': 'A',
+    'SAT': 'RADIO'
 }

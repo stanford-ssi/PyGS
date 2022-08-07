@@ -11,11 +11,16 @@ from analogio import AnalogIn
 
 from gs_config import config
 from scriptRunner import runScript
-#from code.code import radios
+from secrets import secrets
 
 FIFO = bytearray(256)
 fifo_view = memoryview(FIFO)
+
 ID = config['ID']
+STATUS_TOPIC =  secrets['status'] + ID
+REMOTE_TOPIC =  + secrets['remote'] + ID
+
+sendMSG = False # A flag to send a radio signal after initialization 
     
 def subscribe(mqtt_client, userdata, topic, granted_qos):
     # This method is called when the mqtt_client subscribes to a new feed.
@@ -31,17 +36,17 @@ def mqtt_message(client, topic, payload):
             client.publish(topic, message)
         elif payload[:4] == 'EXEC':
             exec(payload[5:])
-        elif payload[:3] == 'RUN':
+        elif payload[:3] == 'RUN': # Just file name, no file type extension
             program = payload[4:]
             runScript(program)
         elif payload[:4] == 'SEND':
-            gs.send_message(client, payload[5:])
+            gs.send_message(payload[5:], client)
         elif payload[:4] == 'PING':
             message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
-            client.publish('ssi/gs/remote/' + ID, message)
-    except Exception as e:
-        print('error: {}'.format(e))
-        client.publish('ssi/gs/remote/' + ID, e)
+            client.publish(REMOTE_TOPIC, message)
+    except Exception as err:
+        print('error: {}'.format(err))
+        client.publish(REMOTE_TOPIC, err)
 
 
 def connected(client, userdata, flags, rc):
@@ -127,6 +132,10 @@ class GroundStation:
             r.ack_retries = 0
             r.listen()
         self.radios = (radio1, radio2, radio3)
+
+        if self.sendMSG:
+            self.send_message("Sending signal on radio init")
+
         return self.radios
 
     def synctime(self, pool):
@@ -259,37 +268,8 @@ class GroundStation:
             reg |= (5 & 0xFF)  # RX mode
             self._write_u8(radio_cs, 0x01, reg)
             yield packet
-
-    def get_msg(self, r):
-        tout = time.monotonic()+2
-        while time.monotonic() < tout:
-            if not r.rx_done():
-                pass
-            else:
-                packet = None
-                error = 1
-                self.last_rssi = r._read_u8(0x1A)-164
-                r.idle()
-                if not r.crc_error():
-                    l = r._read_u8(0x13)  # fifo length
-                    # print(l)
-                    if l:
-                        pos = r._read_u8(0x10)
-                        r._write_u8(0x0D, pos)
-                        packet = fifo_view[:l]
-                        r._read_into(0, packet)
-                    error = 0
-                else:
-                    print('crc error')
-                    yield b'CRC ERROR'
-                # clear IRQ flags
-                r._write_u8(0x12, 0xFF)
-                # start listening again
-                r.operation_mode = 5
-                tout = time.monotonic() + 2
-                yield packet
                 
-    def send_message(self, client, message):
+    def send_message(self, message, client=None):
         log = ""
         print("Sending Message: {}".format(message))
         log += "Sending Message \n"
@@ -314,6 +294,7 @@ class GroundStation:
             else:
                 print("Radio {} failed to send message".format(r.name))
                 log += "Radio {} failed to send message".format(r.name)
-        client.publish('ssi/gs/remote/' + ID, log)
+        if client != None:
+            client.publish(REMOTE_TOPIC, log)
 
 gs = GroundStation()

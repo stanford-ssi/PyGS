@@ -1,7 +1,5 @@
 *old*
 
-
-
 # CircuitPython drive files
 *.fseventsd/
 *.metadata_never_index
@@ -10,3 +8,5 @@
 *.URL
 *secrets*
 
+#VSCode
+*.DS_Store
