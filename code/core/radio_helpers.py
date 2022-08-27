@@ -5,7 +5,6 @@ import alarm
 import pycubed_rfm9x
 import adafruit_requests
 import rtc
-import json
 from microcontroller import cpu
 from analogio import AnalogIn
 
