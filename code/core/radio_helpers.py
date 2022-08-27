@@ -10,7 +10,7 @@ from microcontroller import cpu
 from analogio import AnalogIn
 
 from gs_config import config
-from scriptRunner import runScript
+from core.scriptRunner import runScript
 from secrets import secrets
 
 FIFO = bytearray(256)

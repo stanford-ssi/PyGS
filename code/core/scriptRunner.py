@@ -1,4 +1,4 @@
-import dummyScript
+import scripts.dummyScript as dummyScript
 
 scripts = {
     'dummyScript': dummyScript
