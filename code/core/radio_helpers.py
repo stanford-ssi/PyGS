@@ -47,6 +47,9 @@ class GroundStation:
         self.R3_CS.switch_to_output(True)
         self._BUFFER = bytearray(256)
 
+        self.radios = None
+        self.id = None
+
     @property
     def battery_voltage(self):
         _v = 0
@@ -97,6 +100,7 @@ class GroundStation:
             r.ack_delay = 0.2
             r.ack_retries = 0
             r.listen()
+
         self.radios = (radio1, radio2, radio3)
 
         if sendMSG:
@@ -298,4 +302,4 @@ class GroundStation:
         # successfully to the broker.
         print("Connected to MQTT broker!")
 # TODO How does this work? Is it the same ground station instance no matter who imports it? Should we also use __name__ == __main__ ?
-gs = GroundStation()
+#gs = GroundStation()
