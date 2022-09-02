@@ -16,6 +16,12 @@ DATA_TOPIC = secrets['data']
 STATUS_TOPIC =  secrets['status'] + ID
 REMOTE_TOPIC =  + secrets['remote'] + ID
 
+# """"""""""""""""""""
+ #TODO: need to do a clean up of this code for best pracitces. Such as if __name__ == __main__:
+    # Before I do the above, make sure that it will still work. Especially with alarm.exit_and_deep_sleep_until_alarms
+ # Proper class handling as well as global variables 
+# """"""""""""""""""""
+
 radios = []
 # if we haven't slept yet, init radios
 if not alarm.wake_alarm:
@@ -93,9 +99,9 @@ if wifi.radio.ap_info is not None:
         socket_pool=pool,
         is_ssl=False
     )
-    mqtt_client.on_connect = connected
-    mqtt_client.on_message = mqtt_message
-    mqtt_client.on_subscribe = subscribe
+    mqtt_client.on_connect = gs.connected
+    mqtt_client.on_message = gs.mqtt_message
+    mqtt_client.on_subscribe = gs.subscribe
 
     status = {
         "Time": time.time(),

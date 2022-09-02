@@ -20,39 +20,6 @@ STATUS_TOPIC =  secrets['status'] + ID
 REMOTE_TOPIC =  + secrets['remote'] + ID
 
 sendMSG = False # A flag to send a radio signal after initialization 
-    
-def subscribe(mqtt_client, userdata, topic, granted_qos):
-    # This method is called when the mqtt_client subscribes to a new feed.
-    print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
-
-def mqtt_message(client, topic, payload):
-    print("[{}] {}".format(topic, payload))
-    try:
-        if payload[:7] == 'PUBLISH':
-            argsList = payload[8:].split(' ', 1) # Cuts off space as well
-            topic = argsList[0]
-            message = argsList[1]
-            client.publish(topic, message)
-        elif payload[:4] == 'EXEC':
-            exec(payload[5:])
-        elif payload[:3] == 'RUN': # Just file name, no file type extension
-            program = payload[4:]
-            runScript(program)
-        elif payload[:4] == 'SEND':
-            gs.send_message(payload[5:], client)
-        elif payload[:4] == 'PING':
-            message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
-            client.publish(REMOTE_TOPIC, message)
-    except Exception as err:
-        print('error: {}'.format(err))
-        client.publish(REMOTE_TOPIC, err)
-
-
-def connected(client, userdata, flags, rc):
-    # This function will be called when the client is connected
-    # successfully to the broker.
-    print("Connected to MQTT broker!")
-
 
 class GroundStation:
     myuid = int.from_bytes(cpu.uid, 'big')
@@ -296,4 +263,39 @@ class GroundStation:
         if client != None:
             client.publish(REMOTE_TOPIC, log)
 
+    def mqtt_message(client, topic, payload):
+        print("[{}] {}".format(topic, payload))
+        try:
+            if payload[:7] == 'PUBLISH':
+                argsList = payload[8:].split(' ', 1) # Cuts off space as well
+                topic = argsList[0]
+                message = argsList[1]
+                client.publish(topic, message)
+            elif payload[:4] == 'EXEC':
+                exec(payload[5:])
+            elif payload[:3] == 'RUN': # Just file name, no file type extension
+                program = payload[4:]
+                runScript(program)
+            elif payload[:4] == 'SEND': 
+                # TODO: Need to see if this is going to be a general send signal or one directly to sapling
+                # Need to see how sapling is going to communicate. Whether it also sets radio nodes. 
+                # I believe that it also sends packages in a json format, which we'll need to decode
+                gs.send_message(payload[5:], client)
+            elif payload[:4] == 'PING':
+                message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
+                client.publish(REMOTE_TOPIC, message)
+        except Exception as err:
+            print('error: {}'.format(err))
+            client.publish(REMOTE_TOPIC, err)
+
+    def subscribe(mqtt_client, userdata, topic, granted_qos):
+        # This method is called when the mqtt_client subscribes to a new feed.
+        print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
+
+
+    def connected(client, userdata, flags, rc):
+        # This function will be called when the client is connected
+        # successfully to the broker.
+        print("Connected to MQTT broker!")
+# TODO How does this work? Is it the same ground station instance no matter who imports it? Should we also use __name__ == __main__ ?
 gs = GroundStation()
