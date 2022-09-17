@@ -141,9 +141,8 @@ class GroundStation:
             r.ack_delay = 0.2
             r.ack_retries = 0
 
-            r.rp = RadioProtocol(r)
 
-            r.r_aptp = AsyncPacketTransferProtocol(r.rp)
+            r.r_aptp = AsyncPacketTransferProtocol(r)
             #r.outbox = r.r_aptp.outbox
             #r.inbox = r.r_aptp.inbox
             r.r_ftp = FileTransferProtocol(r.r_aptp)
