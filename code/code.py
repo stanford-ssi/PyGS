@@ -1,20 +1,54 @@
-from radio_helpers import GroundStation
-import wifi, socketpool, time, alarm
+import wifi, socketpool, time, alarm, rtc
+import adafruit_requests
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
-from core.radio_helpers import mqtt_message, connected, subscribe
+from core.radio_helpers import mqtt_message, connected, subscribe, GS
 from secrets import secrets
 from gs_config import config
 import storage, os, board, json
 from binascii import hexlify
 import time
 
-GS = GroundStation()
+
 ID = config['ID']
 SAT = GS.SATELLITE[config['SAT']]
 DATA_TOPIC = secrets['data']
 STATUS_TOPIC =  secrets['status'] + ID
-REMOTE_TOPIC =  + secrets['remote'] + ID
+REMOTE_TOPIC =  secrets['remote'] + ID
 
+def synctime(pool):
+    try:
+        requests = adafruit_requests.Session(pool)
+        TIME_API = "http://worldtimeapi.org/api/ip"
+        the_rtc = rtc.RTC()
+        response = None
+        while True:
+            try:
+                print("Fetching time")
+                # print("Fetching json from", TIME_API)
+                response = requests.get(TIME_API)
+                break
+            except (ValueError, RuntimeError) as e:
+                print("Failed to get data, retrying\n", e)
+                continue
+
+        json1 = response.json()
+        print(json1)
+        current_time = json1['datetime']
+        the_date, the_time = current_time.split('T')
+        year, month, mday = [int(x) for x in the_date.split('-')]
+        the_time = the_time.split('.')[0]
+        hours, minutes, seconds = [int(x) for x in the_time.split(':')]
+
+        # We can also fill in these extra nice things
+        year_day = json1['day_of_year']
+        week_day = json1['day_of_week']
+        is_dst = json1['dst']
+
+        now = time.struct_time(
+            (year, month, mday, hours, minutes, seconds, week_day, year_day, is_dst))
+        the_rtc.datetime = now
+    except Exception as e:
+        print('[WARNING]', e)
 
 def attempt_wifi():
     # try connecting to wifi
@@ -26,9 +60,10 @@ def attempt_wifi():
         # Create a socket pool
         pool = socketpool.SocketPool(wifi.radio)
         # sync out RTC from the web
-        GS.synctime(pool)
+        synctime(pool)
     except Exception as e:
         print("Unable to connect to WiFi: {}".format(e))
+        return None
     else:
         return pool
 
@@ -70,9 +105,9 @@ def set_up_mqtt(pool):
             socket_pool=pool,
             is_ssl=False
         )
-    mqtt_client.on_connect = GS.connected
-    mqtt_client.on_message = GS.mqtt_message
-    mqtt_client.on_subscribe = GS.subscribe
+    mqtt_client.on_connect = connected
+    mqtt_client.on_message = mqtt_message
+    mqtt_client.on_subscribe = subscribe
 
     status = {
         "Time": time.time(),
@@ -91,7 +126,7 @@ def set_up_mqtt(pool):
     message = "GS {} status: ".format(ID) + json.dumps(status)
     mqtt_client.publish(STATUS_TOPIC, message)
 
-    GS.mqtt_client = MQTT
+    GS.mqtt_client = mqtt_client
 
 def send_cache_messages():
     if GS.msg_cache:
@@ -126,6 +161,7 @@ def check_for_commands():
         else:
             print(queuedUp)
         time.sleep(2)
+
 # """"""""""""""""""""
  #TODO: need to do a clean up of this code for best pracitces. Such as if __name__ == __main__:
     # Before I do the above, make sure that it will still work. Especially with alarm.exit_and_deep_sleep_until_alarms
@@ -157,7 +193,7 @@ def main():
     # try connecting to wifi
     pool = attempt_wifi()
 
-    # check radios
+    # check radios (And initializes them)
     new_messages = get_new_messages()
 
     if new_messages:
@@ -201,7 +237,7 @@ def main():
             GS.msg_cache = GS.msg_cache + 1
 
     GS.counter = GS.counter + 1
-
+    #TODO: Might have to set them to listen here
     print("Finished. Deep sleep until RX interrupt or {}s timeout...".format(GS.deep_sleep))
     # wake up on IRQ or after deep sleep time
     pin_alarm1 = alarm.pin.PinAlarm(pin=board.IO5, value=True, pull=False)  # radio1

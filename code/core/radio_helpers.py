@@ -7,9 +7,11 @@ import adafruit_requests
 import rtc
 from microcontroller import cpu
 from analogio import AnalogIn
-
+from core.async_wrappers import RadioProtocol
+from ptp import AsyncPacketTransferProtocol
+from ftp import FileTransferProtocol
 from gs_config import config
-from scriptRunner import runScript
+from core.scriptRunner import runScript
 from secrets import secrets
 
 FIFO = bytearray(256)
@@ -17,14 +19,48 @@ fifo_view = memoryview(FIFO)
 
 ID = config['ID']
 STATUS_TOPIC =  secrets['status'] + ID
-REMOTE_TOPIC =  + secrets['remote'] + ID
+REMOTE_TOPIC =  secrets['remote'] + ID
 
 sendMSG = False # A flag to send a radio signal after initialization 
+
+def mqtt_message(client, topic, payload):
+    print("[{}] {}".format(topic, payload))
+    try:
+        if payload[:7] == 'PUBLISH':
+            argsList = payload[8:].split(' ', 1) # Cuts off space as well
+            topic = argsList[0]
+            message = argsList[1]
+            client.publish(topic, message)
+        elif payload[:4] == 'EXEC':
+            exec(payload[5:])
+        elif payload[:3] == 'RUN': # Just file name, no file type extension
+            program = payload[4:]
+            runScript(program)
+        elif payload[:4] == 'SEND': 
+            # TODO: Need to see if this is going to be a general send signal or one directly to sapling
+            # Need to see how sapling is going to communicate. Whether it also sets radio nodes. 
+            # I believe that it also sends packages in a json format, which we'll need to decode
+            GS.send_message(payload[5:], client)
+        elif payload[:4] == 'PING':
+            message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
+            client.publish(REMOTE_TOPIC, message)
+    except Exception as err:
+        print('error: {}'.format(err))
+        client.publish(REMOTE_TOPIC, err)
+
+def subscribe(mqtt_client, userdata, topic, granted_qos):
+    # This method is called when the mqtt_client subscribes to a new feed.
+    print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
+
+
+def connected(client, userdata, flags, rc):
+    # This function will be called when the client is connected
+    # successfully to the broker.
+    print("Connected to MQTT broker!")
 
 class GroundStation:
     myuid = int.from_bytes(cpu.uid, 'big')
     last_rssi = 0
-    radios = None
 
     SATELLITE = {
         # 436.703
@@ -49,6 +85,7 @@ class GroundStation:
 
         self.radios = None
         self.id = None
+        self.mqtt_client = None
 
     @property
     def battery_voltage(self):
@@ -80,9 +117,13 @@ class GroundStation:
         radio1.name = 1
         radio2.name = 2
         radio3.name = 3
+
+        self.radios = (radio1, radio2, radio3)
+
         # configure radios
-        for r in (radio1, radio2, radio3):
-            r.node = 0x33  # ground station ID
+        for r in self.radios:
+            r.node = 0xAB  # ground station ID (Sat sends to all, so it doesnt matter)
+            r.destination = 0xFA # target sat's radiohead ID (Sat accepts all, so it doesn't matter)
             r.idle()
 
             # The two variables below need to be commented out if we want to test with our own radios
@@ -99,49 +140,19 @@ class GroundStation:
             r.ack_wait = 2
             r.ack_delay = 0.2
             r.ack_retries = 0
-            r.listen()
 
-        self.radios = (radio1, radio2, radio3)
+            r.rp = RadioProtocol(r)
+
+            r.r_aptp = AsyncPacketTransferProtocol(r.rp)
+            #r.outbox = r.r_aptp.outbox
+            #r.inbox = r.r_aptp.inbox
+            r.r_ftp = FileTransferProtocol(r.r_aptp)
+        
 
         if sendMSG:
             self.send_message("Sending signal on radio init")
 
         return self.radios
-
-    def synctime(self, pool):
-        try:
-            requests = adafruit_requests.Session(pool)
-            TIME_API = "http://worldtimeapi.org/api/ip"
-            the_rtc = rtc.RTC()
-            response = None
-            while True:
-                try:
-                    print("Fetching time")
-                    # print("Fetching json from", TIME_API)
-                    response = requests.get(TIME_API)
-                    break
-                except (ValueError, RuntimeError) as e:
-                    print("Failed to get data, retrying\n", e)
-                    continue
-
-            json1 = response.json()
-            print(json1)
-            current_time = json1['datetime']
-            the_date, the_time = current_time.split('T')
-            year, month, mday = [int(x) for x in the_date.split('-')]
-            the_time = the_time.split('.')[0]
-            hours, minutes, seconds = [int(x) for x in the_time.split(':')]
-
-            # We can also fill in these extra nice things
-            year_day = json1['day_of_year']
-            week_day = json1['day_of_week']
-            is_dst = json1['dst']
-
-            now = time.struct_time(
-                (year, month, mday, hours, minutes, seconds, week_day, year_day, is_dst))
-            the_rtc.datetime = now
-        except Exception as e:
-            print('[WARNING]', e)
 
     @property
     def counter(self):
@@ -203,22 +214,31 @@ class GroundStation:
     def rx_done(self, radio_cs):
         return (self._read_u8(radio_cs, 0x12) & 0x40) >> 6
 
-    def get_msg2(self, radio_cs):
-        # hacky way of reading radio RX buffer without reinitalizing the radios
+    def is_crc(self, radio_cs):
+        return not (self._read_u8(radio_cs,0x12) & 0x20) >> 5
+    
+    def clear_irq(self, radio_cs):
+        self._write_u8(radio_cs, 0x12, 0xFF)
 
-        if not (self._read_u8(radio_cs, 0x12) & 0x40) >> 6:
-            pass
-        else:
-            packet = None
-            error = 1
+    def set_to_idle(self, radio_cs):
             self.last_rssi = self._read_u8(radio_cs, 0x1A)-164
             # put into idle mode
             reg = self._read_u8(radio_cs, 0x01)
             reg &= ~7  # mask
             reg |= (1 & 0xFF)  # standby
             self._write_u8(radio_cs, 0x01, reg)
-            if not (self._read_u8(radio_cs,0x12) & 0x20) >> 5:
-            #if True:
+
+    def get_msg2(self, radio_cs):
+        # hacky way of reading radio RX buffer without reinitalizing the radios
+
+        if not self.rx_done(radio_cs):
+            pass
+        else:
+            packet = None
+            error = 1
+            self.set_to_idle(radio_cs)
+            #if not (self._read_u8(radio_cs,0x12) & 0x20) >> 5:
+            if not self.is_crc(radio_cs): # same as above
                 l = self._read_u8(radio_cs, 0x13)  # fifo length
                 # print(l)
                 if l:
@@ -231,8 +251,8 @@ class GroundStation:
                 print('crc error')
                 yield b'CRC ERROR'
             # clear IRQ flags
-            self._write_u8(radio_cs, 0x12, 0xFF)
-            # start listening again
+            self.clear_irq(radio_cs)
+            # start listening again TODO: Why do we want it to listen again? (Probably cause we want radios to listen again befoer shutdown (in this case before intitialization))
             reg = self._read_u8(radio_cs, 0x01)
             reg &= ~7  # mask
             reg |= (5 & 0xFF)  # RX mode
@@ -253,10 +273,6 @@ class GroundStation:
 
             status = r.send(message, keep_listening=False)
 
-            # Turn them back on
-            for radio in self.radios:
-                radio.listen()
-
             if status:
                 print("Signal sent successfully on radio {}".format(r.name))
                 log += "[log]Signal sent successfully on radio {}".format(r.name)
@@ -266,40 +282,65 @@ class GroundStation:
                 log += "Radio {} failed to send message".format(r.name)
         if client != None:
             client.publish(REMOTE_TOPIC, log)
+    
+    def gs_listen(self):
+        for r in self.radios:
+            r.listen()
 
-    def mqtt_message(client, topic, payload):
-        print("[{}] {}".format(topic, payload))
-        try:
-            if payload[:7] == 'PUBLISH':
-                argsList = payload[8:].split(' ', 1) # Cuts off space as well
-                topic = argsList[0]
-                message = argsList[1]
-                client.publish(topic, message)
-            elif payload[:4] == 'EXEC':
-                exec(payload[5:])
-            elif payload[:3] == 'RUN': # Just file name, no file type extension
-                program = payload[4:]
-                runScript(program)
-            elif payload[:4] == 'SEND': 
-                # TODO: Need to see if this is going to be a general send signal or one directly to sapling
-                # Need to see how sapling is going to communicate. Whether it also sets radio nodes. 
-                # I believe that it also sends packages in a json format, which we'll need to decode
-                gs.send_message(payload[5:], client)
-            elif payload[:4] == 'PING':
-                message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
-                client.publish(REMOTE_TOPIC, message)
-        except Exception as err:
-            print('error: {}'.format(err))
-            client.publish(REMOTE_TOPIC, err)
+    def validate_beacon(self, payload): # TODO: Payload will probably be in bytes
+        return 'Hello World!' == payload
+    
+    def gs_rx(self, time_out=30) -> (pycubed_rfm9x.RFM9x | None):
+        '''
+        asd
+        '''
 
-    def subscribe(mqtt_client, userdata, topic, granted_qos):
-        # This method is called when the mqtt_client subscribes to a new feed.
-        print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
+        end_time = time.monotonic() + time_out
+        while time.monotonic() < end_time:
+            for radio in self.radios:
+                if radio.rx_done:
+                    radio.idle()
+                    packet = None
+                    error = 1
+                    if not self.is_crc(radio.cs): # same as above
+                        l = self._read_u8(radio.cs, 0x13)  # fifo length
+                        # print(l)
+                        if l:
+                            pos = self._read_u8(radio.cs, 0x10) # Address of packet
+                            self._write_u8(radio.cs, 0x0D, pos) # Write into FIFO
+                            packet = fifo_view[:l]
+                            self._read_into(radio.cs, 0, packet)
+                        error = 0
+                    else:
+                        print('crc error')
+                    # clear IRQ flags
+                    self.clear_irq(radio.cs)
+                    # start listening again
+                    radio.listen()
+                    if self.validate_beacon(packet):
+                        return radio
+        return None
 
+    def send_file(self, cmd, filename):
+        # Below would wait to receieve a beackon
+        # Set them all to listen
+        self.gs_listen()
 
-    def connected(client, userdata, flags, rc):
-        # This function will be called when the client is connected
-        # successfully to the broker.
-        print("Connected to MQTT broker!")
+        # Listen for a beacon and grab first antenna to make contact
+        radio = self.gs_rx()
+
+        if radio is None:
+            yield 'Error, no contact'
+        else:
+            ack = radio.send_with_ack(cmd)
+            if ack is not None:
+                if ack: print('ACK RSSI:',radio.last_rssi-137)
+
+            num_packets, _ = await radio.r_aptp.receive_packet()
+            missing = await radio.radio_ftp.receive_file(f'/sd/{filename}', num_packets)
+            print(f"missing packets: {missing}")
+            print("Received file!")
+
 # TODO How does this work? Is it the same ground station instance no matter who imports it? Should we also use __name__ == __main__ ?
 #gs = GroundStation()
+GS = GroundStation()
