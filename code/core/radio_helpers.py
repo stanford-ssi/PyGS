@@ -7,7 +7,6 @@ import adafruit_requests
 import rtc
 from microcontroller import cpu
 from analogio import AnalogIn
-from core.async_wrappers import RadioProtocol
 from ptp import AsyncPacketTransferProtocol
 from ftp import FileTransferProtocol
 from gs_config import config
@@ -37,9 +36,6 @@ def mqtt_message(client, topic, payload):
             program = payload[4:]
             runScript(program)
         elif payload[:4] == 'SEND': 
-            # TODO: Need to see if this is going to be a general send signal or one directly to sapling
-            # Need to see how sapling is going to communicate. Whether it also sets radio nodes. 
-            # I believe that it also sends packages in a json format, which we'll need to decode
             GS.send_message(payload[5:], client)
         elif payload[:4] == 'PING':
             message = "You pinged ground station {0}. This is the local time: {1}".format(config['ID'], time.time())
@@ -122,8 +118,8 @@ class GroundStation:
 
         # configure radios
         for r in self.radios:
-            r.node = 0xAB  # ground station ID (Sat sends to all, so it doesnt matter)
-            r.destination = 0xFA # target sat's radiohead ID (Sat accepts all, so it doesn't matter)
+            r.node = 0xBA  # ground station ID
+            r.destination = 0xAB # target sat's radiohead ID
             r.idle()
 
             # The two variables below need to be commented out if we want to test with our own radios
@@ -259,6 +255,8 @@ class GroundStation:
             yield packet
                 
     def send_message(self, message, client=None):
+        # TODO: Change so it sends to all witih r.send paramter as we will have init id and dest nodes
+        # Might not have to set them all to idle as it will send out with specific 
         log = ""
         print("Sending Message: {}".format(message))
         log += "Sending Message \n"
@@ -318,6 +316,8 @@ class GroundStation:
                     radio.listen()
                     if self.validate_beacon(packet):
                         return radio
+                    else:
+                        print(f"Received message, but failed to verify as beacon {packet}")
         return None
 
     def send_file(self, cmd, filename):
@@ -340,6 +340,4 @@ class GroundStation:
             print(f"missing packets: {missing}")
             print("Received file!")
 
-# TODO How does this work? Is it the same ground station instance no matter who imports it? Should we also use __name__ == __main__ ?
-#gs = GroundStation()
 GS = GroundStation()

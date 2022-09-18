@@ -51,6 +51,7 @@ def synctime(pool):
         print('[WARNING]', e)
 
 def attempt_wifi():
+    # TODO: Move wifi pass and id to config
     # try connecting to wifi
     print("Connecting to WiFi...")
     try:
@@ -68,13 +69,16 @@ def attempt_wifi():
         return pool
 
 def get_new_messages():
+    '''
+    Req: Must be called before radios are initialized, otherwise will fail
+    '''
     new_messages = {}
     if alarm.wake_alarm:
         # hacky way of checking the radios without initalizing the hardware
-        for r in radios:
-            if GS.rx_done(radios[r]):
+        for r, cs in GS.radios.items(): # This uses a temporary list
+            if GS.rx_done(cs):
                 print(r, end=": ")
-                for msg in GS.get_msg2(radios[r]):
+                for msg in GS.get_msg2(cs):
                     if msg is not None:
                         print("[{}] rssi:{}".format(bytes(msg), GS.last_rssi), end=", ")
                         if (msg == b'CRC ERROR'):
@@ -162,11 +166,6 @@ def check_for_commands():
             print(queuedUp)
         time.sleep(2)
 
-# """"""""""""""""""""
- #TODO: need to do a clean up of this code for best pracitces. Such as if __name__ == __main__:
-    # Before I do the above, make sure that it will still work. Especially with alarm.exit_and_deep_sleep_until_alarms
- # Proper class handling as well as global variables 
-# """"""""""""""""""""
 def main():
     
     GS.id = ID
@@ -181,6 +180,8 @@ def main():
         GS.msg_cache = 0
         GS.deep_sleep = 600
     else:
+        # Temporary radio list
+        # TODO move this to _init_ in GS class, and make sure its not hard coded
         GS.radios = {1: GS.R1_CS, 2: GS.R2_CS, 3: GS.R3_CS}
 
 
@@ -237,9 +238,10 @@ def main():
             GS.msg_cache = GS.msg_cache + 1
 
     GS.counter = GS.counter + 1
-    #TODO: Might have to set them to listen here
+    GS.gs_listen()
     print("Finished. Deep sleep until RX interrupt or {}s timeout...".format(GS.deep_sleep))
     # wake up on IRQ or after deep sleep time
+    # TODO: Make this actually loop through radios so its not a hard 3. Moreover, set the pin number to be set with the radios above
     pin_alarm1 = alarm.pin.PinAlarm(pin=board.IO5, value=True, pull=False)  # radio1
     pin_alarm2 = alarm.pin.PinAlarm(pin=board.IO6, value=True, pull=False)  # radio2
     pin_alarm3 = alarm.pin.PinAlarm(pin=board.IO7, value=True, pull=False)  # radio3
