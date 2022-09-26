@@ -131,7 +131,7 @@ class GroundStation:
             r.coding_rate = config['CR']
             r.preamble_length = 8
             r.enable_crc = False
-            # if getting crc error change this to false
+            # NOTE: if getting crc error change this to false
             r.low_datarate_optimize = False
             r.ack_wait = 2
             r.ack_delay = 0.2
@@ -321,6 +321,7 @@ class GroundStation:
         return None
 
     def send_file(self, cmd, filename):
+        # TODO: This doesnt work 
         # Below would wait to receieve a beackon
         # Set them all to listen
         self.gs_listen()
